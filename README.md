@@ -11,10 +11,12 @@ of a serverless AWS portfolio project.
 - Restrict appointments to 09:00, 13:00, and 17:00.
 - Reject duplicate bookings for the same date and time.
 - Release a time slot when its booking is cancelled.
-- Six automated tests using pytest.
+- Seven automated tests using pytest.
 - Persistent booking storage with SQLite.
 - Database-level uniqueness constraint for each date and time slot.
 - Automated tests with isolated temporary databases.
+- Check available time slots for a selected date.
+- Availability updates automatically after booking or cancellation.
 
 ## Technologies
 
@@ -40,6 +42,7 @@ The development API runs at http://127.0.0.1:5000.
 | POST | /bookings | Create a booking |
 | GET | /bookings | List bookings |
 | DELETE | /bookings/<booking_id> | Cancel a booking |
+| GET | /availability?date=YYYY-MM-DD | List available time slots for a date |
 
 Example booking request:
 

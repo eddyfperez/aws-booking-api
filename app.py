@@ -120,3 +120,49 @@ def cancel_booking(booking_id):
         "id": booking_id,
         "status": "cancelled"
     }, 200
+
+@app.get("/availability")
+def get_availability():
+    date_text = request.args.get("date", "").strip()
+
+    try:
+        selected_date = datetime.strptime(
+            date_text,
+            "%Y-%m-%d"
+        ).date()
+    except ValueError:
+        return {
+            "error": "Debes indicar una fecha válida con formato YYYY-MM-DD"
+        }, 400
+
+    now = datetime.now()
+
+    if selected_date < now.date():
+        return {
+            "error": "No puedes consultar una fecha pasada"
+        }, 400
+
+    normalized_date = selected_date.strftime("%Y-%m-%d")
+
+    # Buscar los horarios que ya están reservados ese día.
+    occupied_times = {
+        booking["time"]
+        for booking in get_bookings()
+        if booking["date"] == normalized_date
+    }
+
+    available_times = []
+
+    for time in AVAILABLE_TIMES:
+        appointment = datetime.strptime(
+            f"{normalized_date} {time}",
+            "%Y-%m-%d %H:%M"
+        )
+
+        if time not in occupied_times and appointment > now:
+            available_times.append(time)
+
+    return {
+        "date": normalized_date,
+        "available_times": available_times
+    }, 200

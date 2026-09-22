@@ -129,3 +129,47 @@ def test_cancel_unknown_booking(client):
     )
 
     assert response.status_code == 404
+
+
+def test_availability_updates_after_booking_and_cancellation(
+    client, booking_data
+):
+    selected_date = booking_data["date"]
+    url = f"/availability?date={selected_date}"
+
+    # Al comenzar, todos los horarios deben estar disponibles.
+    initial = client.get(url)
+
+    assert initial.status_code == 200
+    assert initial.get_json() == {
+        "date": selected_date,
+        "available_times": ["09:00", "13:00", "17:00"]
+    }
+
+    # Reservar el turno de las 09:00.
+    created = client.post("/bookings", json=booking_data)
+
+    assert created.status_code == 201
+
+    booking_id = created.get_json()["id"]
+
+    # El horario reservado ya no debe aparecer.
+    after_booking = client.get(url)
+
+    assert after_booking.status_code == 200
+    assert after_booking.get_json()["available_times"] == [
+        "13:00", "17:00"
+    ]
+
+    # Cancelar la reserva.
+    cancelled = client.delete(f"/bookings/{booking_id}")
+
+    assert cancelled.status_code == 200
+
+    # El turno debe volver a estar disponible.
+    after_cancellation = client.get(url)
+
+    assert after_cancellation.status_code == 200
+    assert after_cancellation.get_json()["available_times"] == [
+        "09:00", "13:00", "17:00"
+    ]
