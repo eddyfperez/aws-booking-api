@@ -1,4 +1,4 @@
-name: Python Tests
+name: Python and Docker Tests
 
 on:
   push:
@@ -27,3 +27,46 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -v
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v6
+
+      - name: Build Docker image
+        run: docker build -t booking-api:ci .
+
+      - name: Start container
+        run: |
+          docker run -d \
+            --name booking-api-ci \
+            -p 127.0.0.1:5001:5000 \
+            --mount source=booking-ci-data,target=/app/data \
+            booking-api:ci
+
+      - name: Check API health
+        run: |
+          curl --fail --silent --show-error \
+            --retry 10 \
+            --retry-connrefused \
+            --retry-delay 2 \
+            --max-time 5 \
+            --retry-max-time 60 \
+            http://127.0.0.1:5001/health \
+            -o health.json
+
+          python3 -c 'import json; data = json.load(open("health.json")); assert data == {"status": "ok"}, data'
+
+      - name: Show container logs
+        if: always()
+        run: docker logs booking-api-ci || true
+
+      - name: Clean up
+        if: always()
+        run: |
+          docker rm -f booking-api-ci || true
+          docker volume rm booking-ci-data || true
