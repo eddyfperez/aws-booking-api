@@ -11,7 +11,7 @@ of a serverless AWS portfolio project.
 - Restrict appointments to 09:00, 13:00, and 17:00.
 - Reject duplicate bookings for the same date and time.
 - Release a time slot when its booking is cancelled.
-- Seven automated tests using pytest.
+- Eight automated tests using pytest, including a two-request concurrency test.
 - Persistent booking storage with SQLite.
 - Database-level uniqueness constraint for each date and time slot.
 - Automated tests with isolated temporary databases.
@@ -66,7 +66,7 @@ Example booking request:
 - Authentication is not implemented.
 - Cancelled bookings are deleted; cancellation history is not retained.
 - SQLite storage is local to the machine running the application.
-- Concurrent request behavior has not yet been tested.
+- Concurrency has been tested with two simultaneous requests; high-load behavior has not been tested.
 - The application has not been deployed to AWS.
 
 

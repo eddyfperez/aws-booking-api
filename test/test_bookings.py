@@ -4,6 +4,8 @@ import pytest
 
 import database
 from app import app
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 
 @pytest.fixture
@@ -173,3 +175,41 @@ def test_availability_updates_after_booking_and_cancellation(
     assert after_cancellation.get_json()["available_times"] == [
         "09:00", "13:00", "17:00"
     ]
+
+
+def test_simultaneous_bookings(client, booking_data):
+    barrier = Barrier(2)
+
+    def send_booking():
+        # Cada solicitud utiliza su propio cliente.
+        with app.test_client() as separate_client:
+            # Esperar a que ambos participantes estén listos.
+            barrier.wait(timeout=5)
+
+            response = separate_client.post(
+                "/bookings",
+                json=booking_data
+            )
+
+            return response.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(send_booking)
+        second = executor.submit(send_booking)
+
+        results = [
+            first.result(timeout=10),
+            second.result(timeout=10)
+        ]
+
+    # Solo una solicitud debe crear la reserva.
+    assert sorted(results) == [201, 409]
+
+    # La base de datos debe contener exactamente una reserva.
+    listing = client.get("/bookings")
+
+    assert listing.status_code == 200
+    assert len(listing.get_json()["bookings"]) == 1
+
+
+    
