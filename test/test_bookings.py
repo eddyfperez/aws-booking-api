@@ -1,0 +1,95 @@
+import pytest
+from datetime import datetime, timedelta
+from app import app, bookings
+
+
+@pytest.fixture
+def client():
+    app.config["TESTING"] = True
+    bookings.clear()
+
+    with app.test_client() as test_client:
+        yield test_client
+
+    bookings.clear()
+
+
+@pytest.fixture
+def booking_data():
+    tomorrow = datetime.now() + timedelta(days=1)
+
+    return {
+        "customer_name": "Cliente de prueba",
+        "date": tomorrow.strftime("%Y-%m-%d"),
+        "time": "09:00"
+    }
+
+
+def test_create_booking(client, booking_data):
+    response = client.post("/bookings", json=booking_data)
+
+    assert response.status_code == 201
+
+    created = response.get_json()
+
+    assert created["customer_name"] == "Cliente de prueba"
+    assert created["status"] == "confirmed"
+    assert "id" in created
+
+    listing = client.get("/bookings")
+
+    assert listing.status_code == 200
+    assert listing.get_json()["bookings"] == [created]
+
+
+def test_missing_customer_name(client, booking_data):
+    del booking_data["customer_name"]
+
+    response = client.post("/bookings", json=booking_data)
+
+    assert response.status_code == 400
+    assert client.get("/bookings").get_json()["bookings"] == []
+
+
+def test_duplicate_booking(client, booking_data):
+    first = client.post("/bookings", json=booking_data)
+    second = client.post("/bookings", json=booking_data)
+
+    assert first.status_code == 201
+    assert second.status_code == 409
+
+    saved = client.get("/bookings").get_json()["bookings"]
+
+    assert len(saved) == 1
+
+
+def test_unavailable_time(client, booking_data):
+    booking_data["time"] = "10:00"
+
+    response = client.post("/bookings", json=booking_data)
+
+    assert response.status_code == 400
+    assert client.get("/bookings").get_json()["bookings"] == []
+
+
+def test_cancel_and_rebook(client, booking_data):
+    created = client.post("/bookings", json=booking_data)
+
+    assert created.status_code == 201
+
+    booking_id = created.get_json()["id"]
+
+    cancelled = client.delete(f"/bookings/{booking_id}")
+
+    assert cancelled.status_code == 200
+    assert client.get("/bookings").get_json()["bookings"] == []
+
+    new_booking = client.post("/bookings", json=booking_data)
+
+    assert new_booking.status_code == 201
+
+
+def test_cancel_unknown_booking(client):
+    response = client.delete("/bookings/id-inexistente")
+
+    assert response.status_code == 404
