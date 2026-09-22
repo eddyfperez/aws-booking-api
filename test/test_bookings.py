@@ -1,17 +1,27 @@
-import pytest
 from datetime import datetime, timedelta
-from app import app, bookings
+
+import pytest
+
+import database
+from app import app
 
 
 @pytest.fixture
-def client():
+def client(tmp_path, monkeypatch):
+    # Usar una base temporal distinta en cada prueba.
+    test_database = tmp_path / "test_bookings.db"
+
+    monkeypatch.setattr(
+        database,
+        "DATABASE_PATH",
+        test_database
+    )
+
+    database.init_db()
     app.config["TESTING"] = True
-    bookings.clear()
 
     with app.test_client() as test_client:
         yield test_client
-
-    bookings.clear()
 
 
 @pytest.fixture
@@ -26,7 +36,10 @@ def booking_data():
 
 
 def test_create_booking(client, booking_data):
-    response = client.post("/bookings", json=booking_data)
+    response = client.post(
+        "/bookings",
+        json=booking_data
+    )
 
     assert response.status_code == 201
 
@@ -45,15 +58,25 @@ def test_create_booking(client, booking_data):
 def test_missing_customer_name(client, booking_data):
     del booking_data["customer_name"]
 
-    response = client.post("/bookings", json=booking_data)
+    response = client.post(
+        "/bookings",
+        json=booking_data
+    )
 
     assert response.status_code == 400
     assert client.get("/bookings").get_json()["bookings"] == []
 
 
 def test_duplicate_booking(client, booking_data):
-    first = client.post("/bookings", json=booking_data)
-    second = client.post("/bookings", json=booking_data)
+    first = client.post(
+        "/bookings",
+        json=booking_data
+    )
+
+    second = client.post(
+        "/bookings",
+        json=booking_data
+    )
 
     assert first.status_code == 201
     assert second.status_code == 409
@@ -66,30 +89,43 @@ def test_duplicate_booking(client, booking_data):
 def test_unavailable_time(client, booking_data):
     booking_data["time"] = "10:00"
 
-    response = client.post("/bookings", json=booking_data)
+    response = client.post(
+        "/bookings",
+        json=booking_data
+    )
 
     assert response.status_code == 400
     assert client.get("/bookings").get_json()["bookings"] == []
 
 
 def test_cancel_and_rebook(client, booking_data):
-    created = client.post("/bookings", json=booking_data)
+    created = client.post(
+        "/bookings",
+        json=booking_data
+    )
 
     assert created.status_code == 201
 
     booking_id = created.get_json()["id"]
 
-    cancelled = client.delete(f"/bookings/{booking_id}")
+    cancelled = client.delete(
+        f"/bookings/{booking_id}"
+    )
 
     assert cancelled.status_code == 200
     assert client.get("/bookings").get_json()["bookings"] == []
 
-    new_booking = client.post("/bookings", json=booking_data)
+    new_booking = client.post(
+        "/bookings",
+        json=booking_data
+    )
 
     assert new_booking.status_code == 201
 
 
 def test_cancel_unknown_booking(client):
-    response = client.delete("/bookings/id-inexistente")
+    response = client.delete(
+        "/bookings/id-inexistente"
+    )
 
     assert response.status_code == 404

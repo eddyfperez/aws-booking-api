@@ -1,11 +1,20 @@
-from flask import Flask, request
-from uuid import uuid4
+import sqlite3
 from datetime import datetime
+from uuid import uuid4
+
+from flask import Flask, request
+
+from database import (
+    init_db,
+    insert_booking,
+    get_bookings,
+    delete_booking
+)
 
 app = Flask(__name__)
 
-# Almacenamiento temporal: se vacía al reiniciar la aplicación.
-bookings = []
+# Crear la tabla si todavía no existe.
+init_db()
 
 # Horarios para un solo equipo de limpieza.
 AVAILABLE_TIMES = ["09:00", "13:00", "17:00"]
@@ -57,7 +66,7 @@ def create_booking():
             "error": "La reserva debe ser para una fecha y hora futura"
         }, 400
 
-    # Guardar y comparar las fechas con un formato uniforme.
+    # Usar un formato uniforme para guardar los datos.
     normalized_date = appointment.strftime("%Y-%m-%d")
     normalized_time = appointment.strftime("%H:%M")
 
@@ -68,17 +77,7 @@ def create_booking():
             "available_times": AVAILABLE_TIMES
         }, 400
 
-    # Comprobar si el turno ya está ocupado.
-    for existing_booking in bookings:
-        if (
-            existing_booking["date"] == normalized_date
-            and existing_booking["time"] == normalized_time
-        ):
-            return {
-                "error": "Ya existe una reserva para esa fecha y hora"
-            }, 409
-
-    # Crear y guardar la reserva.
+    # Preparar la reserva.
     booking = {
         "id": str(uuid4()),
         "customer_name": data["customer_name"].strip(),
@@ -87,27 +86,37 @@ def create_booking():
         "status": "confirmed"
     }
 
-    bookings.append(booking)
+    # SQLite impide guardar dos reservas para el mismo turno.
+    try:
+        insert_booking(booking)
+    except sqlite3.IntegrityError as error:
+        if "bookings.date, bookings.time" in str(error):
+            return {
+                "error": "Ya existe una reserva para esa fecha y hora"
+            }, 409
+
+        # No tratar otros errores de integridad como duplicados.
+        raise
 
     return booking, 201
 
 
 @app.get("/bookings")
 def list_bookings():
-    return {"bookings": bookings}, 200
+    return {"bookings": get_bookings()}, 200
+
 
 @app.delete("/bookings/<booking_id>")
 def cancel_booking(booking_id):
-    for index, booking in enumerate(bookings):
-        if booking["id"] == booking_id:
-            cancelled_booking = bookings.pop(index)
+    deleted = delete_booking(booking_id)
 
-            return {
-                "message": "Reserva cancelada correctamente",
-                "id": cancelled_booking["id"],
-                "status": "cancelled"
-            }, 200
+    if not deleted:
+        return {
+            "error": "Reserva no encontrada"
+        }, 404
 
     return {
-        "error": "Reserva no encontrada"
-    }, 404
+        "message": "Reserva cancelada correctamente",
+        "id": booking_id,
+        "status": "cancelled"
+    }, 200

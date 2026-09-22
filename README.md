@@ -12,10 +12,13 @@ of a serverless AWS portfolio project.
 - Reject duplicate bookings for the same date and time.
 - Release a time slot when its booking is cancelled.
 - Six automated tests using pytest.
+- Persistent booking storage with SQLite.
+- Database-level uniqueness constraint for each date and time slot.
+- Automated tests with isolated temporary databases.
 
 ## Technologies
 
-Python 3.12, Flask, pytest, and Git.
+Python 3.12, Flask, SQLite, pytest, Git, and GitHub Actions.
 
 ## Run locally on Windows
 
@@ -56,11 +59,13 @@ Example booking request:
 
 ## Current limitations
 
-- Bookings are stored in memory and disappear when the app restarts.
 - Scheduling assumes one cleaning team and uses the computer's local time.
-- Duplicate checks do not yet protect against simultaneous requests.
 - Authentication is not implemented.
+- Cancelled bookings are deleted; cancellation history is not retained.
+- SQLite storage is local to the machine running the application.
+- Concurrent request behavior has not yet been tested.
 - The application has not been deployed to AWS.
+
 
 ## Planned improvements
 
