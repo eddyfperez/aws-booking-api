@@ -52,7 +52,7 @@ jobs:
         run: |
           curl --fail --silent --show-error \
             --retry 10 \
-            --retry-connrefused \
+            --retry-all-errors \
             --retry-delay 2 \
             --max-time 5 \
             --retry-max-time 60 \
