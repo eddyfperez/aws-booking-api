@@ -312,17 +312,22 @@ It is not a full load test.
 
 ## Continuous integration
 
-GitHub Actions runs the Python tests on pushes to `main`
-and pull requests targeting `main`.
+GitHub Actions runs on pushes to `main` and pull requests
+targeting `main`.
 
-The workflow:
+The workflow has two jobs:
 
-1. Checks out the repository.
-2. Sets up Python 3.12.
-3. Installs dependencies.
-4. Runs pytest.
+1. `test`: installs dependencies and runs nine automated tests.
+2. `docker`: runs after the tests pass, builds the Docker image,
+   starts a temporary container, and verifies that `/health`
+   returns `{"status": "ok"}`.
 
-The current workflow does not build or test the Docker image.
+The health check retries transient startup failures within
+configured limits. Container logs are collected, and the
+temporary container and volume are removed afterward.
+
+This workflow validates the application and container startup.
+It does not deploy the API or publish the Docker image.
 
 ## Manual verification
 
@@ -351,7 +356,6 @@ This is a learning project and is not ready for real customer use.
 
 ## Roadmap
 
-- Build and smoke-test the Docker image in GitHub Actions.
 - Add authentication and customer-specific access controls.
 - Implement booking rescheduling.
 - Add service selection and multiple cleaning teams.
