@@ -1,7 +1,13 @@
 import sqlite3
 from pathlib import Path
+import os
 
-DATABASE_PATH = Path(__file__).resolve().parent / "bookings.db"
+DATABASE_PATH = Path(
+    os.environ.get(
+        "DATABASE_PATH",
+        str(Path(__file__).resolve().parent / "bookings.db")
+    )
+)
 
 
 def init_db():
