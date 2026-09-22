@@ -1,16 +1,16 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
+from threading import Barrier
 
 import pytest
 
 import database
-from app import app
-from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
+from app import app, BUSINESS_TIMEZONE
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    # Usar una base temporal distinta en cada prueba.
+    # Cada prueba utiliza su propia base de datos temporal.
     test_database = tmp_path / "test_bookings.db"
 
     monkeypatch.setattr(
@@ -28,7 +28,10 @@ def client(tmp_path, monkeypatch):
 
 @pytest.fixture
 def booking_data():
-    tomorrow = datetime.now() + timedelta(days=1)
+    tomorrow = (
+        datetime.now(BUSINESS_TIMEZONE)
+        + timedelta(days=1)
+    )
 
     return {
         "customer_name": "Cliente de prueba",
@@ -139,7 +142,7 @@ def test_availability_updates_after_booking_and_cancellation(
     selected_date = booking_data["date"]
     url = f"/availability?date={selected_date}"
 
-    # Al comenzar, todos los horarios deben estar disponibles.
+    # Todos los horarios deben estar disponibles al comenzar.
     initial = client.get(url)
 
     assert initial.status_code == 200
@@ -149,7 +152,10 @@ def test_availability_updates_after_booking_and_cancellation(
     }
 
     # Reservar el turno de las 09:00.
-    created = client.post("/bookings", json=booking_data)
+    created = client.post(
+        "/bookings",
+        json=booking_data
+    )
 
     assert created.status_code == 201
 
@@ -164,7 +170,9 @@ def test_availability_updates_after_booking_and_cancellation(
     ]
 
     # Cancelar la reserva.
-    cancelled = client.delete(f"/bookings/{booking_id}")
+    cancelled = client.delete(
+        f"/bookings/{booking_id}"
+    )
 
     assert cancelled.status_code == 200
 
@@ -181,9 +189,8 @@ def test_simultaneous_bookings(client, booking_data):
     barrier = Barrier(2)
 
     def send_booking():
-        # Cada solicitud utiliza su propio cliente.
+        # Cada tarea utiliza un cliente independiente.
         with app.test_client() as separate_client:
-            # Esperar a que ambos participantes estén listos.
             barrier.wait(timeout=5)
 
             response = separate_client.post(
@@ -202,14 +209,55 @@ def test_simultaneous_bookings(client, booking_data):
             second.result(timeout=10)
         ]
 
-    # Solo una solicitud debe crear la reserva.
+    # Una solicitud tiene éxito y la otra encuentra un conflicto.
     assert sorted(results) == [201, 409]
 
-    # La base de datos debe contener exactamente una reserva.
     listing = client.get("/bookings")
 
     assert listing.status_code == 200
     assert len(listing.get_json()["bookings"]) == 1
 
 
-    
+def test_availability_uses_business_timezone(client, monkeypatch):
+    import app as app_module
+    from datetime import timezone
+
+    # Momento fijo: 14:00 UTC = 10:00 en Santo Domingo.
+    fixed_now = datetime(
+        2030, 6, 15, 14, 0,
+        tzinfo=timezone.utc
+    )
+
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                # Simular un servidor cuya hora local sea UTC.
+                return fixed_now.replace(tzinfo=None)
+
+            return fixed_now.astimezone(tz)
+
+    # Cambiar el reloj de la aplicación solo durante esta prueba.
+    monkeypatch.setattr(
+        app_module,
+        "datetime",
+        FixedDatetime
+    )
+
+    response = client.get(
+        "/availability?date=2030-06-15"
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["available_times"] == [
+        "13:00", "17:00"
+    ]
+
+    # Las 13:00 siguen siendo futuras en Santo Domingo.
+    created = client.post("/bookings", json={
+        "customer_name": "Prueba de zona horaria",
+        "date": "2030-06-15",
+        "time": "13:00"
+    })
+
+    assert created.status_code == 201

@@ -1,6 +1,7 @@
 import sqlite3
 from datetime import datetime
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from flask import Flask, request
 
@@ -16,8 +17,9 @@ app = Flask(__name__)
 # Crear la tabla si todavía no existe.
 init_db()
 
-# Horarios para un solo equipo de limpieza.
+# Configuración de la agenda para un equipo de limpieza.
 AVAILABLE_TIMES = ["09:00", "13:00", "17:00"]
+BUSINESS_TIMEZONE = ZoneInfo("America/Santo_Domingo")
 
 
 @app.get("/health")
@@ -46,22 +48,22 @@ def create_booking():
                 "error": f"El campo {field} es obligatorio"
             }, 400
 
-    # Convertir el texto recibido en una fecha y hora.
     date_text = data["date"].strip()
     time_text = data["time"].strip()
 
+    # Interpretar la fecha y hora en la zona de la agenda.
     try:
         appointment = datetime.strptime(
             f"{date_text} {time_text}",
             "%Y-%m-%d %H:%M"
-        )
+        ).replace(tzinfo=BUSINESS_TIMEZONE)
     except ValueError:
         return {
             "error": "Fecha u hora inválida. Usa YYYY-MM-DD y HH:MM"
         }, 400
 
-    # Por ahora usamos la hora local de la computadora.
-    if appointment <= datetime.now():
+    # Comparar usando la misma zona horaria.
+    if appointment <= datetime.now(BUSINESS_TIMEZONE):
         return {
             "error": "La reserva debe ser para una fecha y hora futura"
         }, 400
@@ -70,14 +72,12 @@ def create_booking():
     normalized_date = appointment.strftime("%Y-%m-%d")
     normalized_time = appointment.strftime("%H:%M")
 
-    # Comprobar que el horario esté permitido.
     if normalized_time not in AVAILABLE_TIMES:
         return {
             "error": "Horario no disponible",
             "available_times": AVAILABLE_TIMES
         }, 400
 
-    # Preparar la reserva.
     booking = {
         "id": str(uuid4()),
         "customer_name": data["customer_name"].strip(),
@@ -95,7 +95,7 @@ def create_booking():
                 "error": "Ya existe una reserva para esa fecha y hora"
             }, 409
 
-        # No tratar otros errores de integridad como duplicados.
+        # Propagar otros errores de integridad.
         raise
 
     return booking, 201
@@ -121,6 +121,7 @@ def cancel_booking(booking_id):
         "status": "cancelled"
     }, 200
 
+
 @app.get("/availability")
 def get_availability():
     date_text = request.args.get("date", "").strip()
@@ -135,7 +136,7 @@ def get_availability():
             "error": "Debes indicar una fecha válida con formato YYYY-MM-DD"
         }, 400
 
-    now = datetime.now()
+    now = datetime.now(BUSINESS_TIMEZONE)
 
     if selected_date < now.date():
         return {
@@ -144,7 +145,7 @@ def get_availability():
 
     normalized_date = selected_date.strftime("%Y-%m-%d")
 
-    # Buscar los horarios que ya están reservados ese día.
+    # Obtener los horarios ocupados para la fecha seleccionada.
     occupied_times = {
         booking["time"]
         for booking in get_bookings()
@@ -157,7 +158,7 @@ def get_availability():
         appointment = datetime.strptime(
             f"{normalized_date} {time}",
             "%Y-%m-%d %H:%M"
-        )
+        ).replace(tzinfo=BUSINESS_TIMEZONE)
 
         if time not in occupied_times and appointment > now:
             available_times.append(time)

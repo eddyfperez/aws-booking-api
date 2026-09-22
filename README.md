@@ -11,7 +11,8 @@ of a serverless AWS portfolio project.
 - Restrict appointments to 09:00, 13:00, and 17:00.
 - Reject duplicate bookings for the same date and time.
 - Release a time slot when its booking is cancelled.
-- Eight automated tests using pytest, including a two-request concurrency test.
+- Nine automated tests using pytest, including concurrency and timezone behavior.
+- Scheduling uses the America/Santo_Domingo timezone.
 - Persistent booking storage with SQLite.
 - Database-level uniqueness constraint for each date and time slot.
 - Automated tests with isolated temporary databases.
@@ -62,7 +63,7 @@ Example booking request:
 
 ## Current limitations
 
-- Scheduling assumes one cleaning team and uses the computer's local time.
+- Scheduling assumes one cleaning team and a single business timezone.
 - Authentication is not implemented.
 - Cancelled bookings are deleted; cancellation history is not retained.
 - SQLite storage is local to the machine running the application.
